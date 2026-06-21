@@ -8,7 +8,11 @@ from django.utils import timezone
 from django.db import transaction
 from django.contrib.auth.hashers import make_password, check_password
 from PIL import Image, UnidentifiedImageError
-import easyocr
+try:
+    import easyocr
+    _easyocr_available = True
+except ImportError:
+    _easyocr_available = False
 import numpy as np
 import re
 import uuid
@@ -124,6 +128,8 @@ _ocr_reader = None
 
 def get_ocr_reader():
     global _ocr_reader
+    if not _easyocr_available:
+        return None
     if _ocr_reader is None:
         _ocr_reader = easyocr.Reader(
             ['en'],
@@ -149,6 +155,8 @@ def extract_stock_symbols_from_image(image_file) -> list[str]:
         return []
 
     reader = get_ocr_reader()
+    if reader is None:
+        return []
     results = reader.readtext(
         binary_np,
         detail=1,
