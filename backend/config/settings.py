@@ -76,6 +76,7 @@ GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID", default="")
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+WHITENOISE_ROOT = BASE_DIR / "static"
 WHITENOISE_INDEX_FILE = True
 
 MEDIA_URL = "/media/"
