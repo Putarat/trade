@@ -30,7 +30,7 @@ Trade/
 │
 ├── backend/
 │   ├── config/
-│   │   ├── urls.py     ← URL routing + View functions ทั้งหมดอยู่ในไฟล์เดียว (~1300 บรรทัด)
+│   │   ├── urls.py     ← URL routing + View functions ทั้งหมดอยู่ในไฟล์เดียว (~1560 บรรทัด)
 │   │   └── settings.py ← Django settings, อ่าน .env ด้วย python-decouple
 │   ├── core/
 │   │   ├── models.py   ← Database models ทั้งหมด
@@ -40,7 +40,7 @@ Trade/
 │
 └── frontend/
     └── src/
-        ├── App.jsx     ← ทั้งแอปอยู่ในไฟล์เดียว (~2700 บรรทัด)
+        ├── App.jsx     ← ทั้งแอปอยู่ในไฟล์เดียว (~3750 บรรทัด)
         └── App.css     ← styles ทั้งหมด
 ```
 
@@ -130,12 +130,14 @@ node start.js
 | POST | `/api/transactions/<stock_id>/add` | เพิ่ม buy/sell |
 | DELETE | `/api/transactions/delete/<tx_id>` | ลบ transaction |
 
-### Prices
+### Prices & Market Data
 | Method | Path | หน้าที่ |
 |---|---|---|
-| GET | `/api/price/<symbol>?currency=THB\|USD` | ราคาปัจจุบัน (yfinance) |
+| GET | `/api/price/<symbol>?currency=THB\|USD` | ราคาปัจจุบัน (yfinance, cache 60s) |
 | GET | `/api/price/<symbol>/history?period=&currency=` | OHLCV history (yfinance) |
-| GET | `/api/fx-rate` | USD/THB rate |
+| GET | `/api/fx-rate` | USD/THB rate (Frankfurter primary, cache 10 นาที) |
+| GET | `/api/commodities` | ★ Gold/Silver/Oil/Copper/NatGas (cache 5 นาที) |
+| GET | `/api/stocks/search?q=` | ★ ค้นหาหุ้น US/Thai/CN/VN/HK (Yahoo Finance) |
 
 ### Portfolios
 | Method | Path | หน้าที่ |
@@ -156,7 +158,7 @@ node start.js
 ## Frontend — App.jsx Structure
 
 ```
-App.jsx (~2700 บรรทัด)
+App.jsx (~3750 บรรทัด)
 │
 ├── Imports
 │   └── recharts: Cell, Pie, PieChart, ResponsiveContainer, Tooltip,
@@ -166,34 +168,55 @@ App.jsx (~2700 บรรทัด)
 ├── Constants
 │   ├── PIE_COLORS, USD_TO_THB_RATE_DEFAULT
 │   ├── PAYMENT_PLANS, INVESTOR_MODELS
-│   └── LP_STOCKS (mock data สำหรับ login page)
+│   ├── LP_STOCKS (mock data สำหรับ login page)
+│   ├── ★ MEGA_TRENDS_LIST      — 12 Mega Trends พร้อม icon/color/desc
+│   ├── ★ MEGA_TREND_SYMBOL_MAP — symbol → trend name
+│   ├── ★ SECTOR_TO_TREND       — sector → trend (fallback)
+│   └── ★ TREND_META            — trend → { icon, color }
 │
 ├── Helper Components
-│   ├── useWindowWidth()         hook
-│   ├── StockLogo                logo + fallback initials
-│   ├── CustomPieTooltip         Recharts tooltip
-│   ├── PieSliceLabel            Recharts label รอบ pie
-│   ├── IssueCard                card ใน Admin Panel
-│   ├── CandlestickChart         SVG candlestick (OHLC)
-│   ├── ConstellationBg          canvas animation login
-│   └── LoginPage                หน้า login/register ทั้งหมด
+│   ├── useWindowWidth()               hook responsive
+│   ├── getStockLogoSources(symbol)    ★ คืน [FMP, Parqet, EODHD] URLs
+│   ├── StockLogo                      logo + fallback initials (3 sources)
+│   ├── CustomPieTooltip               Recharts tooltip
+│   ├── PieSliceLabel                  label icon+ชื่อ รอบ pie
+│   ├── IssueCard                      card ใน Admin Panel
+│   ├── CandlestickChart               SVG candlestick (OHLC)
+│   ├── ConstellationBg                canvas animation login
+│   └── LoginPage                      หน้า login/register ทั้งหมด
 │
 └── export default function App()
-    ├── State declarations (~60 states)
+    ├── State declarations (~80 states)
+    │   ├── ★ globalLoading / _apiCount  — global loading overlay
+    │   ├── ★ pieOrder / pieDragOver     — drag-to-reorder pie
+    │   ├── ★ commodities               — commodity prices
+    │   └── ★ stockSearchResults        — Add Stock autocomplete
+    ├── apiStart() / apiEnd()           ★ counter-based loading tracker
     ├── useEffect hooks (theme, auth, data loading)
-    ├── API functions (loadRecords, fetchStockPrice, ...)
-    ├── Calculation functions (getStockMeta, updateStockMeta, ...)
+    ├── API functions (loadRecords, fetchStockPrice, searchStocks, ...)
+    ├── useMemo: pieData, sortedPieData, sectorData, pnlData, megaTrendData
     └── JSX render
+        ├── ★ globalLoadingOverlay      — overlay ครอบทุก screen
         ├── <LoginPage> (ถ้า !authUser)
-        ├── Payment screen (ถ้า activeScreen === "payment")
-        ├── Admin screen (ถ้า activeScreen === "admin")
+        ├── Admin screen
+        ├── Payment screen
         └── Main app screen
-            ├── Top panel (profile, stats, actions)
-            ├── Evaluation panel (investor model, scan)
-            ├── P&L panel (cash, cost, value, pnl, wealth)
-            ├── Chart panel (pie: by stock / by sector)
-            ├── Stock manager (portfolio / watchlist tabs)
-            └── Modals (history, transaction, plan, add stock, report issue)
+            ├── Top panel
+            ├── Evaluation panel
+            ├── P&L panel
+            ├── Chart panel
+            │   ├── Market Status
+            │   ├── ★ Commodity Prices panel
+            │   ├── ★ Mega Trends panel (scrollable)
+            │   └── Pie chart + ★ draggable legend
+            ├── Stock manager (portfolio / watchlist)
+            │   └── ★ per-row fetch price button
+            └── Modals
+                ├── ★ Add Stock (search autocomplete dropdown)
+                ├── Price History (candle/line/area)
+                ├── Transaction
+                ├── Plan / Note
+                └── Report Issue
 ```
 
 ---
@@ -212,7 +235,9 @@ App.jsx (~2700 บรรทัด)
 - `getStockMeta(name)` — อ่าน meta โดย merge: `records` ← `stockMeta` override
 - `updateStockMeta(name, patch)` — อัพเดท state + mirror ลง `records` ทันที (เพื่อให้ pie re-render)
 - `loadRecords()` — เป็น source of truth, reset stockMeta ด้วยข้อมูลจาก DB ทุกครั้ง
-- stock logo มาจาก `https://financialmodelingprep.com/image-stock/<SYMBOL>.png`
+- stock logo ใช้ `getStockLogoSources(symbol)` → [FMP, Parqet, EODHD] → fallback initials
+- `apiStart()` / `apiEnd()` — counter-based global loading tracker (ครอบทุก API call สำคัญ)
+- `searchStocks(q)` — debounce 350ms → `GET /api/stocks/search?q=` → dropdown autocomplete
 
 ### Styling
 - CSS variables: `--bg`, `--card-bg`, `--text`, `--border`, etc. — ทั้ง dark/light theme
@@ -239,10 +264,11 @@ API `/api/price/<symbol>/history` คืน: `date, open, high, low, close, volu
 
 ดู [Flow/issue/feature-suggestions.md](Flow/issue/feature-suggestions.md) สำหรับรายละเอียด
 
-- Password Reset
-- Dividend Tracker
-- Portfolio Performance Benchmark
+- Password Reset (Priority สูงที่สุด)
 - Auto avg_cost จาก Transactions
+- Mega Trends ETF Proxy Score (วัด trend strength จริง)
+- Portfolio Performance Benchmark
+- Dividend Tracker
 - Investment Journal
 
 ---

@@ -32,6 +32,9 @@ frontend/.env
 # Claude Code settings (local only)
 .claude/
 
+# Local credentials reference (ห้าม commit)
+Flow/credentials.md
+
 # IDE / OS
 .vscode/
 .idea/

@@ -5,6 +5,22 @@
 
 ---
 
+## สถานะปัจจุบัน
+
+| ขั้นตอน | สถานะ | รายละเอียด |
+|---|---|---|
+| ✅ แก้โค้ด | สำเร็จ | WhiteNoise, gunicorn, settings, Procfile, build.sh |
+| ✅ Build frontend | สำเร็จ | dist → backend/templates + backend/static |
+| ✅ Push GitHub | สำเร็จ | https://github.com/Putarat/trade (branch: master) |
+| ✅ Supabase | สำเร็จ | Project: veulcflqolztmfxopyoh, Region: Singapore |
+| ✅ Render config | สำเร็จ | Root=backend, Build=bash build.sh, Start=gunicorn, Plan=Free |
+| ⏳ Render env vars | รอดำเนินการ | ใส่ตัวแปรใน Environment tab แล้วกด Deploy |
+| ⏳ Google OAuth | รอดำเนินการ | เพิ่ม Render URL ใน Authorized Origins |
+
+> รหัสผ่านและ credentials ทั้งหมดอยู่ใน `Flow/credentials.md` (gitignored — ไม่ขึ้น GitHub)
+
+---
+
 ## สรุปก่อน — ข้อจำกัดที่ต้องรู้
 
 | ข้อจำกัด | ผลกระทบ |
