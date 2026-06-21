@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+backend/.venv/
+
+# Django secrets & local DB
+backend/.env
+backend/db.sqlite3
+backend/auth_users.json
+backend/auth_sessions.json
+backend/stock_records.json
+
+# Django generated (สร้างใหม่ได้ด้วย collectstatic)
+backend/staticfiles/
+
+# Media uploads (user content — ไม่ commit)
+backend/media/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Frontend build source (เราจะ copy ไป backend/templates + backend/static แทน)
+frontend/dist/
+
+# Env files
+frontend/.env
+
+# Claude Code settings (local only)
+.claude/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

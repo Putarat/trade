@@ -1,0 +1,192 @@
+-- =========================
+-- EXTENSIONS
+-- =========================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- =========================
+-- ENUMS
+-- =========================
+CREATE TYPE user_status AS ENUM ('active', 'suspended', 'deleted');
+CREATE TYPE provider_type AS ENUM ('email', 'google', 'apple', 'line');
+CREATE TYPE plan_type AS ENUM ('pay_per_use', 'package', 'subscription');
+CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded', 'canceled');
+CREATE TYPE payment_method AS ENUM ('promptpay', 'card', 'transfer', 'wallet');
+CREATE TYPE currency_code AS ENUM ('THB', 'USD');
+CREATE TYPE scan_status AS ENUM ('queued', 'processing', 'completed', 'failed');
+
+-- =========================
+-- TABLE: users
+-- =========================
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  display_name VARCHAR(120),
+  status user_status NOT NULL DEFAULT 'active',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =========================
+-- user_auth_providers
+-- =========================
+CREATE TABLE user_auth_providers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  provider provider_type NOT NULL,
+  provider_user_id VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (provider, provider_user_id)
+);
+
+CREATE INDEX idx_user_auth_user_id ON user_auth_providers(user_id);
+
+-- =========================
+-- user_sessions
+-- =========================
+CREATE TABLE user_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  refresh_token_hash VARCHAR(255) NOT NULL,
+  user_agent TEXT,
+  ip_address VARCHAR(64),
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_sessions_user_id ON user_sessions(user_id);
+CREATE INDEX idx_sessions_expires_at ON user_sessions(expires_at);
+
+-- =========================
+-- pricing_plans
+-- =========================
+CREATE TABLE pricing_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(120) NOT NULL,
+  plan_type plan_type NOT NULL,
+  price_thb NUMERIC(10,2) NOT NULL,
+  scans_included INT NOT NULL DEFAULT 0,
+  duration_days INT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =========================
+-- wallets
+-- =========================
+CREATE TABLE wallets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id),
+  scan_credits INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- =========================
+-- payments
+-- =========================
+CREATE TABLE payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  pricing_plan_id UUID REFERENCES pricing_plans(id),
+  amount_thb NUMERIC(10,2) NOT NULL,
+  payment_method payment_method NOT NULL,
+  status payment_status NOT NULL DEFAULT 'pending',
+  provider_txn_id VARCHAR(255) UNIQUE,
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_created_at ON payments(created_at);
+
+-- =========================
+-- scans
+-- =========================
+CREATE TABLE scans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  source_image_url TEXT,
+  status scan_status NOT NULL DEFAULT 'queued',
+  ocr_raw_text TEXT,
+  error_message TEXT,
+  score NUMERIC(4,1),
+  portfolio_type VARCHAR(30),
+  total_value_thb NUMERIC(14,2),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_scans_user_id ON scans(user_id);
+CREATE INDEX idx_scans_status ON scans(status);
+CREATE INDEX idx_scans_created_at ON scans(created_at);
+
+-- =========================
+-- scan_charge_logs
+-- =========================
+CREATE TABLE scan_charge_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  scan_id UUID NOT NULL UNIQUE REFERENCES scans(id),
+  user_id UUID NOT NULL REFERENCES users(id),
+  charge_model VARCHAR(30) NOT NULL DEFAULT 'pay_per_scan',
+  amount_thb NUMERIC(10,2) NOT NULL DEFAULT 20.00,
+  payment_id UUID REFERENCES payments(id),
+  credits_used INT NOT NULL DEFAULT 0,
+  charged_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_charge_user_id ON scan_charge_logs(user_id);
+CREATE INDEX idx_charge_time ON scan_charge_logs(charged_at);
+
+-- =========================
+-- user_stocks
+-- =========================
+CREATE TABLE user_stocks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  symbol VARCHAR(20) NOT NULL,
+  display_name VARCHAR(120),
+  logo_url TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, symbol)
+);
+
+CREATE INDEX idx_user_stocks_user_id ON user_stocks(user_id);
+
+-- =========================
+-- scan_items
+-- =========================
+CREATE TABLE scan_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  scan_id UUID NOT NULL REFERENCES scans(id),
+  user_stock_id UUID NOT NULL REFERENCES user_stocks(id),
+  quantity NUMERIC(18,6) NOT NULL DEFAULT 0,
+  price NUMERIC(18,6) NOT NULL DEFAULT 0,
+  currency currency_code NOT NULL DEFAULT 'THB',
+  fx_rate_to_thb NUMERIC(18,6) NOT NULL DEFAULT 1,
+  value_thb NUMERIC(18,2) NOT NULL DEFAULT 0,
+  source VARCHAR(30) NOT NULL DEFAULT 'ocr',
+  confidence NUMERIC(5,4),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_scan_items_scan_id ON scan_items(scan_id);
+CREATE INDEX idx_scan_items_user_stock_id ON scan_items(user_stock_id);
+CREATE INDEX idx_scan_items_composite ON scan_items(scan_id, user_stock_id);
+
+-- =========================
+-- stock_name_edits
+-- =========================
+CREATE TABLE stock_name_edits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id),
+  user_stock_id UUID NOT NULL REFERENCES user_stocks(id),
+  old_symbol VARCHAR(20) NOT NULL,
+  new_symbol VARCHAR(20) NOT NULL,
+  edited_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_stock_edit_user ON stock_name_edits(user_id);
+CREATE INDEX idx_stock_edit_stock ON stock_name_edits(user_stock_id);
+CREATE INDEX idx_stock_edit_time ON stock_name_edits(edited_at);
